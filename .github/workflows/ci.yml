@@ -47,10 +47,14 @@ jobs:
         # aide itself is run from src/ via PYTHONPATH (below) rather than
         # pip-installed, because its `axm-core>=1.1.0` dependency is not on
         # PyPI — it is the sibling read-side checked out in the next step.
-        # blake3 is pinned explicitly: axm-core's axiom_runtime imports it, and
-        # relying on it arriving transitively through the kernel is exactly the
-        # kind of silent gap the skip-gate is here to catch.
-        run: pip install click "duckdb>=0.9.0" blake3 pytest
+        # The read side (axiom_runtime) imports blake3, cryptography, pyarrow,
+        # and pandas beyond the kernel's own deps. These are installed
+        # EXPLICITLY rather than trusted to arrive transitively: run #1/#2 went
+        # red because cryptography was absent on the clean runner (a local env
+        # had masked it) and the brief↔Spectra test skipped. The clean CI env
+        # is the real test — the skip-gate + `-rs` named the missing module,
+        # which is exactly what they are for.
+        run: pip install click "duckdb>=0.9.0" blake3 cryptography "pyarrow>=14.0.0" pandas pytest
 
       - name: Check out the axm-core read side (axiom_runtime / Spectra)
         # The `brief` test mounts sealed aide shards into axiom_runtime. axm-core
