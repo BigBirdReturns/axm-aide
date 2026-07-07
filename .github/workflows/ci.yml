@@ -1,0 +1,78 @@
+# CI for axm-aide.
+#
+# Mirrors the conventions of the axm-genesis kernel's own CI (same trigger
+# events, runner, Python matrix, action versions) so the ecosystem stays
+# uniform.
+#
+# The suite is two-tier, exactly as it runs locally:
+#   - seal / verify tests are gated on the genesis kernel (axm-build /
+#     axm-verify on PATH) and skip cleanly without it;
+#   - the `brief` test additionally needs axm-core's read side
+#     (axiom_runtime.SpectraEngine) + duckdb, and skips without them.
+# CI installs BOTH the pinned kernel and the axm-core read side so the WHOLE
+# suite runs for real — including the flagship brief↔Spectra test — and then
+# fails outright if anything skips, since a skip here means the kernel or the
+# read-side integration silently failed to import.
+
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: Test suite (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install pinned axm-genesis kernel
+        # Pinned by full commit hash, not a tag or branch, per the axm-genesis
+        # ledger v1.0.0 release policy — the SAME pin every spoke carries. The
+        # [mldsa-compat] extra pulls the pure-Python dilithium-py PQ backend so
+        # the runner needs no system liboqs. Bumping this hash is deliberate.
+        run: |
+          pip install "axm-genesis[mldsa-compat] @ git+https://github.com/BigBirdReturns/axm-genesis.git@9074e7fb2e9cedde692b248cdd0c6a805e77d8ac"
+
+      - name: Install aide's resolvable deps
+        # aide itself is run from src/ via PYTHONPATH (below) rather than
+        # pip-installed, because its `axm-core>=1.1.0` dependency is not on
+        # PyPI — it is the sibling read-side checked out in the next step.
+        run: pip install click "duckdb>=0.9.0" pytest
+
+      - name: Check out the axm-core read side (axiom_runtime / Spectra)
+        # The `brief` test mounts sealed aide shards into axiom_runtime. axm-core
+        # is not frozen (only the kernel is), so this tracks its default branch:
+        # a red run here from an axm-core change is a real integration signal,
+        # not noise. Pin this to a commit if you need reproducibility across an
+        # axm-core change window.
+        uses: actions/checkout@v4
+        with:
+          repository: BigBirdReturns/axm-core
+          path: axm-core-readside
+
+      - name: Run test suite
+        env:
+          PYTHONPATH: ${{ github.workspace }}/src:${{ github.workspace }}/axm-core-readside/spectra
+        run: |
+          set -o pipefail
+          python -m pytest tests/ -q | tee pytest-output.txt
+
+      - name: Verify nothing skipped
+        # With the pinned kernel AND the axm-core read side both present, every
+        # test — seal, verify, and the brief↔Spectra flagship — should run for
+        # real. A skip means an import silently broke; fail loudly.
+        run: |
+          if grep -qE "[0-9]+ skipped" pytest-output.txt; then
+            echo "::error::Tests skipped with the kernel and axm-core read side both installed — an import (kernel or axiom_runtime) silently failed. See pytest-output.txt above."
+            exit 1
+          fi
