@@ -47,7 +47,10 @@ jobs:
         # aide itself is run from src/ via PYTHONPATH (below) rather than
         # pip-installed, because its `axm-core>=1.1.0` dependency is not on
         # PyPI — it is the sibling read-side checked out in the next step.
-        run: pip install click "duckdb>=0.9.0" pytest
+        # blake3 is pinned explicitly: axm-core's axiom_runtime imports it, and
+        # relying on it arriving transitively through the kernel is exactly the
+        # kind of silent gap the skip-gate is here to catch.
+        run: pip install click "duckdb>=0.9.0" blake3 pytest
 
       - name: Check out the axm-core read side (axiom_runtime / Spectra)
         # The `brief` test mounts sealed aide shards into axiom_runtime. axm-core
@@ -61,11 +64,17 @@ jobs:
           path: axm-core-readside
 
       - name: Run test suite
+        # PYTHONPATH covers aide's own src, plus BOTH axm-core paths — its
+        # package root (src/, where axm_core lives) and spectra/ (where
+        # axiom_runtime lives) — so the read-side import resolves fully rather
+        # than only when axiom_runtime happens not to reach into axm_core.
+        # -rs makes any skip print its reason in the log, so a future gate
+        # failure names the missing import instead of hiding it.
         env:
-          PYTHONPATH: ${{ github.workspace }}/src:${{ github.workspace }}/axm-core-readside/spectra
+          PYTHONPATH: ${{ github.workspace }}/src:${{ github.workspace }}/axm-core-readside/src:${{ github.workspace }}/axm-core-readside/spectra
         run: |
           set -o pipefail
-          python -m pytest tests/ -q | tee pytest-output.txt
+          python -m pytest tests/ -rs -q | tee pytest-output.txt
 
       - name: Verify nothing skipped
         # With the pinned kernel AND the axm-core read side both present, every
