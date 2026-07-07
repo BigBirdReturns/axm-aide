@@ -1,0 +1,1323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>axm-aide — Custody of Memory, Surrender of Judgment</title>
+<meta name="description" content="axm-aide: a personal assistant whose memory has custody and whose judgment is surrendered. It journals, tracks tasks, and records agent sessions as genesis-sealed shards — and proposes actions it never executes.">
+<meta property="og:title" content="axm-aide — Custody of Memory, Surrender of Judgment">
+<meta property="og:description" content="Every other assistant asks you to trust its memory and its judgment. This one has auditable memory and surrenders judgment.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=IBM+Plex+Sans:wght@300;400;500&family=Barlow+Condensed:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:           #0d1117;
+  --bg-1:         #161b22;
+  --bg-2:         #1c2330;
+  --bg-3:         #21262d;
+  --steel:        #8b949e;
+  --steel-dim:    #767e8e;
+  --steel-faint:  #5a626a;
+  --cyan:         #39d0d8;
+  --cyan-dim:     #1b6b70;
+  --cyan-glow:    rgba(57,208,216,0.12);
+  --cyan-border:  rgba(57,208,216,0.25);
+  --white:        #e6edf3;
+  --white-dim:    #8b949e;
+  --white-faint:  #5a626a;
+  --rule:         #21262d;
+  --rule-strong:  #30363d;
+  --green:        #3fb950;
+  --green-dim:    rgba(63,185,80,0.15);
+  --amber:        #d29922;
+  --amber-dim:    rgba(210,153,34,0.15);
+  --red:          #f85149;
+  --font-mono:    'IBM Plex Mono', monospace;
+  --font-sans:    'IBM Plex Sans', sans-serif;
+  --font-cond:    'Barlow Condensed', sans-serif;
+  --eco-bg:       #0d1117;
+  --eco-border:   #21262d;
+  --eco-text:     #8b949e;
+  --eco-text-hi:  #e6edf3;
+  --eco-accent:   #39d0d8;
+  --eco-mono:     'IBM Plex Mono', monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--white);
+  font-family: var(--font-mono);
+  font-size: clamp(13px, 1.4vw, 15px);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* ── Scan line overlay ─────────────────────────────────── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,0.03) 2px,
+    rgba(0,0,0,0.03) 4px
+  );
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* ── Circuit trace decoration ──────────────────────────── */
+.trace-bg {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+  opacity: 0.04;
+}
+.trace-bg svg { width: 100%; height: 100%; }
+
+/* ── NAV ───────────────────────────────────────────────── */
+nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(13,17,23,0.92);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--rule-strong);
+  padding: 0 32px;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  height: 44px;
+  overflow-x: auto;
+}
+nav::-webkit-scrollbar { display: none; }
+
+.nav-brand {
+  font-family: var(--font-cond);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: var(--cyan);
+  text-transform: uppercase;
+  margin-right: 32px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.nav-brand span { color: var(--steel); font-weight: 300; }
+
+nav a {
+  color: var(--steel);
+  text-decoration: none;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  padding: 0 14px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+  transition: color 0.15s;
+  border-bottom: 2px solid transparent;
+}
+nav a:hover { color: var(--white); }
+nav a.active {
+  color: var(--cyan);
+  border-bottom-color: var(--cyan);
+}
+
+/* ── HERO ──────────────────────────────────────────────── */
+.hero {
+  position: relative;
+  z-index: 1;
+  padding: 80px 64px 72px;
+  border-bottom: 1px solid var(--rule-strong);
+  background: linear-gradient(180deg, rgba(57,208,216,0.03) 0%, transparent 100%);
+  overflow: hidden;
+}
+
+.hero-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.3em;
+  color: var(--cyan);
+  text-transform: uppercase;
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.hero-label::before {
+  content: '';
+  display: inline-block;
+  width: 24px;
+  height: 1px;
+  background: var(--cyan);
+}
+
+h1 {
+  font-family: var(--font-cond);
+  font-size: clamp(48px, 8.4vw, 100px);
+  font-weight: 700;
+  line-height: 0.94;
+  letter-spacing: -0.01em;
+  color: var(--white);
+  text-transform: uppercase;
+  margin-bottom: 32px;
+}
+h1 em {
+  font-style: normal;
+  color: var(--cyan);
+  display: block;
+}
+
+.hero-sub {
+  font-family: var(--font-sans);
+  font-size: 18px;
+  font-weight: 300;
+  color: var(--white-dim);
+  max-width: 600px;
+  line-height: 1.65;
+  margin-bottom: 32px;
+}
+
+.hero-quote {
+  font-family: var(--font-sans);
+  font-size: 17px;
+  font-weight: 400;
+  font-style: italic;
+  color: var(--white);
+  max-width: 620px;
+  line-height: 1.6;
+  padding: 20px 24px;
+  border-left: 2px solid var(--cyan);
+  background: var(--cyan-glow);
+  margin-bottom: 48px;
+}
+.hero-quote span { color: var(--cyan); font-style: normal; font-weight: 500; }
+
+.hero-stats {
+  display: flex;
+  gap: 48px;
+  flex-wrap: wrap;
+}
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.stat-val {
+  font-family: var(--font-cond);
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--white);
+  letter-spacing: 0.02em;
+}
+.stat-val span { color: var(--cyan); }
+.stat-label {
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  color: var(--steel);
+  text-transform: uppercase;
+}
+
+.hero-corner {
+  position: absolute;
+  top: 40px;
+  right: 64px;
+  opacity: 0.06;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--cyan);
+  line-height: 1.8;
+  letter-spacing: 0.05em;
+  text-align: right;
+  pointer-events: none;
+}
+
+/* ── SECTION BASE ──────────────────────────────────────── */
+section {
+  position: relative;
+  z-index: 1;
+  padding: 72px 64px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.sec-label {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 48px;
+}
+.sec-num {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.25em;
+  color: var(--cyan-dim);
+  text-transform: uppercase;
+}
+.sec-num::after {
+  content: '';
+  display: inline-block;
+  width: 48px;
+  height: 1px;
+  background: var(--steel-faint);
+  margin-left: 12px;
+  vertical-align: middle;
+}
+.sec-title {
+  font-family: var(--font-cond);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.25em;
+  color: var(--steel);
+  text-transform: uppercase;
+}
+
+h2 {
+  font-family: var(--font-cond);
+  font-size: clamp(28px, 4vw, 44px);
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: 0.01em;
+  color: var(--white);
+  text-transform: uppercase;
+  margin-bottom: 20px;
+}
+
+p {
+  font-family: var(--font-sans);
+  font-size: 16px;
+  color: var(--white-dim);
+  line-height: 1.75;
+  max-width: 680px;
+  margin-bottom: 16px;
+}
+p:last-child { margin-bottom: 0; }
+
+code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  color: var(--cyan);
+  background: var(--bg-1);
+  padding: 1px 6px;
+  border-radius: 2px;
+  border: 1px solid var(--rule-strong);
+}
+
+/* ── THESIS ────────────────────────────────────────────── */
+.thesis-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 64px;
+  align-items: center;
+  margin-top: 48px;
+}
+.thesis-img-wrap {
+  border: 1px solid var(--rule-strong);
+  background: var(--bg-1);
+  padding: 16px;
+}
+.thesis-img-wrap img {
+  width: 100%;
+  height: auto;
+  display: block;
+  filter: grayscale(0.15) contrast(1.05);
+}
+.thesis-img-caption {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--steel);
+  margin-top: 14px;
+  line-height: 1.6;
+}
+.thesis-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-top: 28px;
+}
+.thesis-col {
+  border-top: 2px solid var(--rule-strong);
+  padding-top: 16px;
+}
+.thesis-col.after { border-top-color: var(--cyan-dim); }
+.thesis-col-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  color: var(--steel);
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+.thesis-col.after .thesis-col-label { color: var(--cyan); }
+.thesis-col ul { list-style: none; }
+.thesis-col li {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--white-dim);
+  padding: 6px 0;
+  border-bottom: 1px solid var(--rule);
+}
+.thesis-col li:last-child { border-bottom: none; }
+.thesis-col li b { color: var(--white); font-weight: 500; }
+
+/* ── ROLE / RECORD GRID ───────────────────────────────── */
+.role-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--rule-strong);
+  border: 1px solid var(--rule-strong);
+  margin-top: 48px;
+}
+.role-card {
+  background: var(--bg-1);
+  padding: 32px 28px;
+  transition: background 0.2s;
+}
+.role-card:hover { background: var(--bg-2); }
+.role-icon {
+  font-family: var(--font-mono);
+  font-size: 20px;
+  color: var(--cyan);
+  margin-bottom: 16px;
+  display: block;
+}
+.role-name {
+  font-family: var(--font-cond);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--white);
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+.role-ns {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--cyan-dim);
+  margin-bottom: 12px;
+  display: block;
+}
+.role-desc {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--steel);
+  line-height: 1.65;
+  max-width: none;
+  margin-bottom: 0;
+}
+
+/* ── THE GATE ──────────────────────────────────────────── */
+.gate-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 64px;
+  align-items: start;
+  margin-top: 48px;
+}
+.gate-quote {
+  font-family: var(--font-cond);
+  font-size: clamp(22px, 2.6vw, 30px);
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--white);
+  padding: 32px 36px;
+  background: var(--bg-1);
+  border: 1px solid var(--cyan-border);
+  border-left: 3px solid var(--cyan);
+  margin-bottom: 24px;
+}
+.gate-quote span { color: var(--cyan); }
+.gate-list { list-style: none; margin-top: 8px; }
+.gate-list li {
+  font-family: var(--font-sans);
+  font-size: 14.5px;
+  color: var(--white-dim);
+  line-height: 1.7;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--rule);
+  display: flex;
+  gap: 12px;
+}
+.gate-list li:last-child { border-bottom: none; }
+.gate-list li::before {
+  content: '›';
+  color: var(--cyan);
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.gate-list b { color: var(--white); font-weight: 500; }
+
+.disp-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 8px;
+}
+.disp-table th {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--steel);
+  text-align: left;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--rule-strong);
+}
+.disp-table td {
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  color: var(--white-dim);
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--rule);
+}
+.disp-table td:first-child {
+  font-family: var(--font-mono);
+  color: var(--cyan);
+  white-space: nowrap;
+}
+.disp-note {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--steel-dim);
+  margin-top: 16px;
+  line-height: 1.7;
+}
+
+/* ── FLOW (brief) ──────────────────────────────────────── */
+.spectra-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 64px;
+  align-items: start;
+  margin-top: 48px;
+}
+.spectra-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.flow-step {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--rule);
+  position: relative;
+}
+.flow-step:last-child { border-bottom: none; }
+.flow-connector {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+.flow-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--cyan);
+  flex-shrink: 0;
+}
+.flow-line {
+  width: 1px;
+  flex: 1;
+  background: linear-gradient(180deg, var(--cyan-dim), transparent);
+  min-height: 24px;
+  margin-top: 4px;
+}
+.flow-step:last-child .flow-line { display: none; }
+.flow-tag {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  color: var(--cyan);
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.flow-name {
+  font-family: var(--font-cond);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--white);
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.flow-desc {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--steel);
+  line-height: 1.55;
+  max-width: none;
+  margin-bottom: 0;
+}
+
+/* ── CODE BLOCKS ───────────────────────────────────────── */
+.code-block {
+  background: var(--bg-1);
+  border: 1px solid var(--rule-strong);
+  padding: 24px 28px;
+  overflow-x: auto;
+}
+.code-block-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--rule);
+}
+.code-block-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+}
+.code-block-title {
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  color: var(--steel);
+  text-transform: uppercase;
+  margin-left: 4px;
+}
+pre {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre;
+  overflow-x: auto;
+}
+.c  { color: var(--steel-dim); font-style: italic; }
+.kw { color: var(--cyan); }
+.st { color: #a5d6ff; }
+.fn { color: #d2a8ff; }
+.op { color: var(--white-dim); }
+.pa { color: var(--amber); }
+.nu { color: #79c0ff; }
+.ok { color: var(--green); }
+.er { color: var(--red); }
+.hl { color: var(--white); }
+
+/* ── EVIDENCE TIER ─────────────────────────────────────── */
+.evidence-banner {
+  margin-top: 48px;
+  padding: 32px 36px;
+  background: var(--bg-1);
+  border: 1px solid var(--amber-dim);
+  border-left: 3px solid var(--amber);
+}
+.evidence-tier-tag {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  color: var(--amber);
+  background: var(--amber-dim);
+  padding: 4px 12px;
+  border-radius: 3px;
+  margin-bottom: 16px;
+  text-transform: uppercase;
+}
+.evidence-statement {
+  font-family: var(--font-sans);
+  font-size: 17px;
+  font-style: italic;
+  color: var(--white);
+  line-height: 1.6;
+  margin-bottom: 20px;
+  max-width: none;
+}
+.evidence-limits { list-style: none; }
+.evidence-limits li {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--white-dim);
+  line-height: 1.8;
+  padding-left: 20px;
+  position: relative;
+}
+.evidence-limits li::before {
+  content: '−';
+  position: absolute;
+  left: 0;
+  color: var(--amber);
+}
+
+/* ── QUICK START ───────────────────────────────────────── */
+.install-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-top: 48px;
+}
+.install-card {
+  background: var(--bg-1);
+  border: 1px solid var(--rule-strong);
+  padding: 28px;
+}
+.install-phase {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.3em;
+  color: var(--cyan);
+  text-transform: uppercase;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.install-phase::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--rule-strong);
+}
+
+/* ── FOOTER ────────────────────────────────────────────── */
+footer {
+  position: relative;
+  z-index: 1;
+  padding: 48px 64px;
+  border-top: 1px solid var(--rule-strong);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 24px;
+}
+.footer-brand {
+  font-family: var(--font-cond);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  color: var(--steel);
+  text-transform: uppercase;
+}
+.footer-links {
+  display: flex;
+  gap: 32px;
+}
+.footer-links a {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--steel-dim);
+  text-decoration: none;
+  text-transform: uppercase;
+  transition: color 0.15s;
+}
+.footer-links a:hover { color: var(--cyan); }
+.footer-meta {
+  font-size: 11px;
+  color: var(--steel-dim);
+  letter-spacing: 0.08em;
+}
+
+/* ── RESPONSIVE ────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .hero { padding: 56px 24px 48px; }
+  section { padding: 56px 24px; }
+  footer { padding: 40px 24px; }
+  nav { padding: 0 16px; }
+  .role-grid { grid-template-columns: 1fr; }
+  .spectra-layout { grid-template-columns: 1fr; gap: 40px; }
+  .gate-layout { grid-template-columns: 1fr; gap: 40px; }
+  .thesis-layout { grid-template-columns: 1fr; gap: 40px; }
+  .install-grid { grid-template-columns: 1fr; }
+  .hero-corner { display: none; }
+  h1 { font-size: clamp(38px, 12vw, 76px); }
+}
+@media (max-width: 580px) {
+  body { font-size: 13px; }
+  .hero { padding: 36px 16px 32px; }
+  section { padding: 36px 16px; }
+  footer { padding: 28px 16px; }
+  nav { padding: 0 8px; }
+  nav a { font-size: 10px; padding: 10px 6px; letter-spacing: 0.04em; }
+  h2 { font-size: clamp(18px, 5vw, 28px); }
+  pre, code { font-size: 11px; }
+  .thesis-cols { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<!--
+  AXM Ecosystem Nav — shared across all pages
+
+  USAGE: Paste this block at the top of <body> in each page.
+  Set data-active to the current page's key.
+
+  The nav reads CSS custom properties from the host page:
+    --eco-bg       (fallback: #0e0e0f)
+    --eco-border   (fallback: #2a2a2e)
+    --eco-text     (fallback: #666)
+    --eco-text-hi  (fallback: #e0e0e0)
+    --eco-accent   (fallback: #c8a84b)
+    --eco-mono     (fallback: 'DM Mono', monospace)
+
+  Each page sets these in its :root {} to match its palette.
+-->
+<style>
+.eco-nav {
+  position: relative;
+  z-index: 900;
+  background: var(--eco-bg, #0e0e0f);
+  border-bottom: 1px solid var(--eco-border, #2a2a2e);
+  font-family: var(--eco-mono, 'DM Mono', monospace);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  user-select: none;
+}
+.eco-nav-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  height: 36px;
+  gap: 6px;
+}
+.eco-nav-brand {
+  color: var(--eco-text, #666);
+  font-size: 9px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  margin-right: 12px;
+  white-space: nowrap;
+}
+.eco-nav-brand strong {
+  color: var(--eco-text-hi, #e0e0e0);
+  font-weight: 500;
+}
+.eco-nav-sep {
+  width: 1px;
+  height: 14px;
+  background: var(--eco-border, #2a2a2e);
+  margin: 0 6px;
+  flex-shrink: 0;
+}
+.eco-nav a {
+  color: var(--eco-text, #666);
+  text-decoration: none;
+  padding: 6px 10px;
+  border-radius: 3px;
+  transition: color 0.15s, background 0.15s;
+  white-space: nowrap;
+  position: relative;
+}
+.eco-nav a:hover {
+  color: var(--eco-text-hi, #e0e0e0);
+  background: rgba(255,255,255,0.03);
+}
+.eco-nav a.eco-active {
+  color: var(--eco-accent, #c8a84b);
+}
+.eco-nav a.eco-active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 10px;
+  right: 10px;
+  height: 1px;
+  background: var(--eco-accent, #c8a84b);
+  opacity: 0.6;
+}
+.eco-nav-kind {
+  font-size: 8px;
+  opacity: 0.5;
+  display: inline-block;
+  margin-left: 2px;
+  vertical-align: top;
+}
+.eco-nav-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.eco-nav-github {
+  opacity: 0.4;
+  transition: opacity 0.15s;
+}
+.eco-nav-github:hover {
+  opacity: 0.8;
+}
+@media (max-width: 768px) {
+  .eco-nav-inner {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .eco-nav-inner::-webkit-scrollbar { display: none; }
+  .eco-nav a { padding: 6px 7px; font-size: 9px; }
+  .eco-nav-brand { display: none; }
+}
+</style>
+
+<div class="eco-nav" data-active="aide">
+  <div class="eco-nav-inner">
+    <div class="eco-nav-brand"><strong>AXM</strong> &nbsp;Protocol</div>
+    <div class="eco-nav-sep"></div>
+    <a href="https://bigbirdreturns.github.io/axm-genesis/" data-page="genesis">Genesis<span class="eco-nav-kind"> kernel</span></a>
+    <a href="https://bigbirdreturns.github.io/axm-core/" data-page="core">Core<span class="eco-nav-kind"> hub</span></a>
+    <div class="eco-nav-sep"></div>
+    <a href="https://bigbirdreturns.github.io/axm-chat/" data-page="chat">Chat<span class="eco-nav-kind"> spoke</span></a>
+    <a href="https://bigbirdreturns.github.io/axm-show/" data-page="show">Show<span class="eco-nav-kind"> spoke</span></a>
+    <a href="https://bigbirdreturns.github.io/axm-embodied/" data-page="embodied">Embodied<span class="eco-nav-kind"> spoke</span></a>
+    <a href="https://bigbirdreturns.github.io/axm-fleet/" data-page="fleet">Fleet<span class="eco-nav-kind"> spoke</span></a>
+    <a href="https://bigbirdreturns.github.io/axm-sfn/" data-page="sfn">SFN<span class="eco-nav-kind"> spoke</span></a>
+    <a href="https://bigbirdreturns.github.io/axm-aide/" data-page="aide">Aide<span class="eco-nav-kind"> spoke</span></a>
+    <div class="eco-nav-right">
+      <a href="https://github.com/BigBirdReturns" class="eco-nav-github" target="_blank" title="GitHub">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      </a>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  const nav = document.querySelector('.eco-nav');
+  if (!nav) return;
+  const active = nav.dataset.active;
+  if (active) {
+    const link = nav.querySelector(`[data-page="${active}"]`);
+    if (link) link.classList.add('eco-active');
+  }
+})();
+</script>
+
+<!-- Circuit trace bg -->
+<div class="trace-bg" aria-hidden="true">
+  <svg viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice">
+    <g stroke="rgba(57,208,216,1)" stroke-width="1" fill="none">
+      <polyline points="0,120 180,120 180,240 480,240"/>
+      <polyline points="480,240 480,80 720,80"/>
+      <polyline points="720,80 720,320 960,320"/>
+      <polyline points="960,320 960,160 1200,160 1200,400"/>
+      <polyline points="1200,400 1440,400"/>
+      <polyline points="0,480 120,480 120,600 360,600 360,480 600,480"/>
+      <polyline points="600,480 600,720 840,720 840,560 1080,560"/>
+      <polyline points="1080,560 1080,760 1440,760"/>
+      <circle cx="180" cy="120" r="3" fill="rgba(57,208,216,1)"/>
+      <circle cx="480" cy="240" r="3" fill="rgba(57,208,216,1)"/>
+      <circle cx="720" cy="80" r="3" fill="rgba(57,208,216,1)"/>
+      <circle cx="960" cy="320" r="3" fill="rgba(57,208,216,1)"/>
+      <circle cx="1200" cy="160" r="3" fill="rgba(57,208,216,1)"/>
+      <circle cx="120" cy="480" r="3" fill="rgba(57,208,216,1)"/>
+      <circle cx="360" cy="600" r="3" fill="rgba(57,208,216,1)"/>
+      <circle cx="600" cy="480" r="3" fill="rgba(57,208,216,1)"/>
+      <circle cx="840" cy="720" r="3" fill="rgba(57,208,216,1)"/>
+      <circle cx="1080" cy="560" r="3" fill="rgba(57,208,216,1)"/>
+    </g>
+  </svg>
+</div>
+
+<!-- NAV -->
+<nav id="top-nav">
+  <span class="nav-brand">AXM<span>-aide</span></span>
+  <a href="#what" class="active">Overview</a>
+  <a href="#thesis">Thesis</a>
+  <a href="#records">Record Kinds</a>
+  <a href="#gate">The Gate</a>
+  <a href="#brief">The Brief</a>
+  <a href="#evidence">Evidence Tier</a>
+  <a href="#start">Quick Start</a>
+</nav>
+
+<!-- HERO -->
+<header class="hero">
+  <div class="hero-label">AXM · Personal Assistant Spoke · v0.1</div>
+  <h1>Custody Of Memory.<em>Surrender Of Judgment.</em></h1>
+  <p class="hero-sub">axm-aide journals, tracks tasks, and records agent work sessions as genesis-sealed shards — detached-verifiable forever — makes them queryable, and proposes actions it never executes. It keeps custody of your memory. It surrenders the decision.</p>
+  <p class="hero-quote">Every other assistant asks you to trust its memory and its judgment. <span>This one has auditable memory and surrenders judgment.</span></p>
+  <div class="hero-stats">
+    <div class="stat">
+      <span class="stat-val">3</span>
+      <span class="stat-label">Sealed record kinds</span>
+    </div>
+    <div class="stat">
+      <span class="stat-val">0<span>%</span></span>
+      <span class="stat-label">Proposals executed by the aide</span>
+    </div>
+    <div class="stat">
+      <span class="stat-val">31<span>/31</span></span>
+      <span class="stat-label">Tests on the pinned kernel</span>
+    </div>
+  </div>
+  <div class="hero-corner" aria-hidden="true">
+    axm-aide journal "…" --tag insight<br>
+    axm-aide task add "…" --due 2026-07-15<br>
+    axm-aide session record --propose "…"<br>
+    axm-aide brief<br>
+    → genesis-sealed · sh1_… · agent_record
+  </div>
+</header>
+
+<!-- §01 OVERVIEW -->
+<section id="what">
+  <div class="sec-label">
+    <span class="sec-num">§01</span>
+    <span class="sec-title">What The Aide Does</span>
+  </div>
+  <h2>It remembers.<br>It never acts.</h2>
+  <p>axm-aide is the personal-assistant spoke of the AXM ecosystem. It journals your entries, tracks your tasks, and records what an agent work session read, produced, and wants to happen next — each as its own genesis-sealed shard, detached-verifiable forever against an out-of-band key.</p>
+  <p>It does not email anyone. It does not deploy, purchase, or delete anything. Every action it can imagine gets written down as a <b style="color:var(--white)">proposal</b> and handed to a human. The aide is memory with custody, not an actor with authority.</p>
+</section>
+
+<!-- §02 THESIS -->
+<section id="thesis">
+  <div class="sec-label">
+    <span class="sec-num">§02</span>
+    <span class="sec-title">The Thesis</span>
+  </div>
+  <div class="thesis-layout">
+    <div>
+      <h2>Everyone does<br>all three now.</h2>
+      <p>Before AI, a few people <em style="color:var(--white);font-style:normal;">ideate</em>, some <em style="color:var(--white);font-style:normal;">execute</em>, and everyone <em style="color:var(--white);font-style:normal;">uses</em>. After AI, the tooling lets everyone do all three at once. That collapse is the opportunity and the danger.</p>
+      <p>An assistant that can execute is an assistant that can act without you. axm-aide takes the opposite stance: it will remember everything, structure it, and surface it — but it will not act. Every action it can imagine is written down as a proposal and handed to a human.</p>
+      <div class="thesis-cols">
+        <div class="thesis-col">
+          <div class="thesis-col-label">Before AI</div>
+          <ul>
+            <li><b>Few</b> ideate</li>
+            <li><b>Some</b> execute</li>
+            <li><b>All</b> use</li>
+          </ul>
+        </div>
+        <div class="thesis-col after">
+          <div class="thesis-col-label">After AI</div>
+          <ul>
+            <li><b>Everyone</b> ideates</li>
+            <li><b>Everyone</b> executes</li>
+            <li><b>Everyone</b> uses</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="thesis-img-wrap">
+        <img src="docs/thesis-sketch.png" alt="Founding sketch of the axm-aide thesis: before AI, few people ideate, some execute, all use; after AI, everyone does all three at once.">
+      </div>
+      <div class="thesis-img-caption">docs/thesis-sketch.png — the founding sketch. The collapse of ideate/execute/use into one role is why axm-aide refuses to let its own judgment collapse into action.</div>
+    </div>
+  </div>
+</section>
+
+<!-- §03 RECORD KINDS -->
+<section id="records">
+  <div class="sec-label">
+    <span class="sec-num">§03</span>
+    <span class="sec-title">Three Record Kinds</span>
+  </div>
+  <h2>One custody model.<br>Three shapes.</h2>
+  <p>Each kind is sealed as its own signed Genesis v1 shard through the same kernel path (<code>compile_generic_shard</code>). The aide never mints a shard id — genesis derives <code>sh1_…</code> from the sealed manifest bytes.</p>
+
+  <div class="role-grid">
+    <div class="role-card">
+      <span class="role-icon">✎</span>
+      <div class="role-name">Journal</div>
+      <span class="role-ns">aide/journal</span>
+      <p class="role-desc">An entry, sealed verbatim after canonical normalization, plus a <code style="font-size:12px;">recorded_at</code> claim and one <code style="font-size:12px;">tagged</code> claim per caller tag. Tags are CALLER-supplied only — never inferred. Zero tags yields zero tagged claims; the aide summarizes nothing into a claim.</p>
+    </div>
+    <div class="role-card">
+      <span class="role-icon">☐</span>
+      <div class="role-name">Task</div>
+      <span class="role-ns">aide/task</span>
+      <p class="role-desc">A title and a caller-declared <code style="font-size:12px;">declared_status</code> (open / done / dropped), append-only as superseding shards. A status change is a NEW shard; a sealed shard is never rewritten. The task's current status is whatever the latest shard declares.</p>
+    </div>
+    <div class="role-card">
+      <span class="role-icon">◈</span>
+      <div class="role-name">Session</div>
+      <span class="role-ns">aide/session</span>
+      <p class="role-desc">What an agent work session read, produced, and PROPOSED. Every proposal is sealed verbatim and carries <code style="font-size:12px;">requires_disposition "human"</code>. It confers no authority — the session records; it does not act.</p>
+    </div>
+  </div>
+</section>
+
+<!-- §04 THE GATE -->
+<section id="gate">
+  <div class="sec-label">
+    <span class="sec-num">§04</span>
+    <span class="sec-title">The Gate</span>
+  </div>
+
+  <div class="gate-layout">
+    <div>
+      <h2>It proposes.<br>It never executes.</h2>
+      <div class="gate-quote">The vocabulary structurally cannot say <span>approve</span>, <span>true</span>, or <span>execute</span>. The machine never decides — the human disposes.</div>
+      <p>Every proposal a session seals carries <code>requires_disposition "human"</code> as a tier-0 claim, sealed with the bytes. There is no path in the code that turns a proposal into an action — the aide cannot email, deploy, purchase, or delete. Execution, if it happens at all, happens downstream of a human disposition, through a review flow the aide does not control.</p>
+    </div>
+    <div>
+      <ul class="gate-list">
+        <li><b>Custody is genesis's.</b> The aide never mints a shard id — the kernel derives <code style="font-size:12px;">sh1_…</code> from the sealed manifest bytes. One custody model, no second.</li>
+        <li><b>No interpretation without a gate.</b> Tags and statuses are caller-supplied, never inferred. The aide summarizes nothing into a claim.</li>
+        <li><b>The machine never decides.</b> A proposal is a sealed record, not an action. It carries no authority.</li>
+        <li><b>Append-only history.</b> A status change is a new shard; a sealed shard is never rewritten.</li>
+      </ul>
+      <table class="disp-table">
+        <thead>
+          <tr><th>Disposition</th><th>Meaning</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>escalate</td><td>Act on it / route it onward for action.</td></tr>
+          <tr><td>dismiss</td><td>No — drop it.</td></tr>
+          <tr><td>needs_context</td><td>Not enough to decide — send it back.</td></tr>
+        </tbody>
+      </table>
+      <div class="disp-note">v0 trust-model note: proposer and disposer share one key pool. The aide structurally cannot seal a disposition claim — no aide verb emits that predicate — but the separation from the review flow is enforced by vocabulary and code path today, not yet by separate keys. Declared, not hidden.</div>
+    </div>
+  </div>
+</section>
+
+<!-- §05 THE BRIEF -->
+<section id="brief">
+  <div class="sec-label">
+    <span class="sec-num">§05</span>
+    <span class="sec-title">The Morning Read</span>
+  </div>
+
+  <div class="spectra-layout">
+    <div>
+      <h2>Verify first.<br>Then mount.<br>Then read.</h2>
+      <p><code>axm-aide brief</code> verifies every aide shard DETACHED against an out-of-band publisher key before it touches anything — never a shard's own embedded key. A shard that does not PASS is skipped and named, never silently included.</p>
+      <p>Survivors mount through axm-core's Spectra engine — the same read side <code>axm ask</code> uses — and the brief lists open tasks, recent journal entries by id and tags (never summaries), and pending proposals with no matching human disposition yet. Every brief ends with a provenance footer naming every shard consulted.</p>
+    </div>
+
+    <div class="spectra-flow">
+      <div class="flow-step">
+        <div class="flow-connector"><div class="flow-dot"></div><div class="flow-line"></div></div>
+        <div>
+          <div class="flow-tag">Step 1 · Out-of-band</div>
+          <div class="flow-name">Verify Detached</div>
+          <p class="flow-desc">Every aide_* shard is checked against the pool's publisher.pub (or an explicit --trusted-key). Never the shard's own embedded key.</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-connector"><div class="flow-dot"></div><div class="flow-line"></div></div>
+        <div>
+          <div class="flow-tag">Step 2 · Spectra</div>
+          <div class="flow-name">Mount Survivors</div>
+          <p class="flow-desc">Only PASS-ing shards mount into axm-core's SpectraEngine — the same read side axm ask uses. A shard that fails is named in a SKIPPED list, never silently dropped.</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-connector"><div class="flow-dot"></div><div class="flow-line"></div></div>
+        <div>
+          <div class="flow-tag">Step 3 · Aggregate</div>
+          <div class="flow-name">Tasks, Journal, Proposals</div>
+          <p class="flow-desc">Open tasks by latest declared_status. Recent journal by id, tags, and time. Pending proposals with no matching disposition claim.</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-connector"><div class="flow-dot"></div></div>
+        <div>
+          <div class="flow-tag">Step 4 · Footer</div>
+          <div class="flow-name">Provenance, Named</div>
+          <p class="flow-desc">Every shard id consulted is printed. The evidence-tier line closes every brief.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top:48px;">
+    <div class="code-block">
+      <div class="code-block-header">
+        <div class="code-block-dot" style="background:#f85149"></div>
+        <div class="code-block-dot" style="background:#d29922"></div>
+        <div class="code-block-dot" style="background:#3fb950"></div>
+        <span class="code-block-title">axm-aide brief — example output (real shape, illustrative shard ids)</span>
+      </div>
+      <pre>
+<span class="kw">$</span> axm-aide brief
+
+axm-aide brief
+============================================================
+
+OPEN TASKS (1)
+  - [task/ab12cd] Ship axm-aide v0  due 2026-07-15
+
+RECENT JOURNAL (last 5)
+  - 2026-07-06T09:14:02Z  [journal/9f3a1b] #insight #doctrine
+
+  (entries are listed by id, tags and time — not summarized)
+
+PENDING PROPOSALS (1)
+  - [proposal/3c7e21.1] Email the quarterly report to finance
+      requires_disposition: human (escalate | dismiss | needs_context)
+
+  Proposals are sealed records, not actions. Nothing here has
+  been executed; each awaits a human disposition in the review flow.
+
+------------------------------------------------------------
+provenance: 3 shard(s) consulted (verified, out-of-band key)
+  sh1_e30deb2381f9c4a2b7d6e105f8ac3d4e21
+  sh1_7db1e326e5a08c4f912db3a6570b7d3c
+  sh1_0a5beabfcf3d19b7e824a601953165ab
+<span class="ok">evidence tier: agent_record — caller-declared statements, sealed</span>
+<span class="ok">and verifiable; nothing here is a verified fact about the world.</span>
+</pre>
+    </div>
+  </div>
+</section>
+
+<!-- §06 EVIDENCE TIER -->
+<section id="evidence">
+  <div class="sec-label">
+    <span class="sec-num">§06</span>
+    <span class="sec-title">Evidence Tier — Stated Plainly</span>
+  </div>
+  <h2>Not verified truth.<br>Verified custody.</h2>
+  <p>Every aide shard carries <code>content/aide_manifest.json</code> stamping its evidence tier with the bytes, so the limits travel with the record and cannot be lost from a downstream copy.</p>
+
+  <div class="evidence-banner">
+    <span class="evidence-tier-tag">agent_record</span>
+    <p class="evidence-statement">"Caller-declared statements, sealed and verifiable; nothing here is a verified fact about the world."</p>
+    <ul class="evidence-limits">
+      <li>Caller-declared statements only</li>
+      <li>Not verified facts about the world</li>
+      <li>Tags are caller-supplied, never inferred</li>
+      <li>Proposals confer no authority to act — execution requires a human disposition</li>
+      <li>Not platform truth</li>
+    </ul>
+  </div>
+</section>
+
+<!-- §07 QUICK START -->
+<section id="start">
+  <div class="sec-label">
+    <span class="sec-num">§07</span>
+    <span class="sec-title">Quick Start</span>
+  </div>
+  <h2>Journal.<br>Task.<br>Session.<br>Brief.</h2>
+  <p>Not on PyPI. The seal path (journal / task / session / verify) needs only the pinned genesis kernel. <code>brief</code> additionally needs axm-core installed alongside it.</p>
+
+  <div class="install-grid">
+    <div class="install-card">
+      <div class="install-phase">Install</div>
+      <pre style="font-size:12px;line-height:1.75;">
+<span class="c"># Pinned genesis kernel — the only hard dep for the seal path</span>
+<span class="kw">pip install</span> <span class="st">"axm-genesis @ git+https://github.com/BigBirdReturns/axm-genesis.git@9074e7fb2e9cedde692b248cdd0c6a805e77d8ac"</span>
+
+<span class="c"># brief additionally needs axm-core (Spectra read side)</span>
+<span class="kw">pip install -e</span> <span class="pa">../axm-core</span>
+<span class="kw">pip install -e</span> <span class="pa">.</span>              <span class="c"># the aide</span>
+
+<span class="c"># seal-only, no query runtime:</span>
+<span class="kw">pip install -e</span> <span class="pa">'.[minimal]'</span>
+</pre>
+    </div>
+
+    <div class="install-card">
+      <div class="install-phase">Journal → Task → Session → Brief</div>
+      <pre style="font-size:12px;line-height:1.75;">
+<span class="c"># Seal a journal entry (tags are yours; nothing is inferred)</span>
+<span class="kw">axm-aide journal</span> <span class="st">"Realized the aide should never summarize"</span> \
+  <span class="op">--tag</span> insight <span class="op">--tag</span> doctrine
+<span class="ok">✓ sealed journal: 9f3a1b</span>
+
+<span class="c"># Track a task</span>
+<span class="kw">axm-aide task add</span> <span class="st">"Ship axm-aide v0"</span> <span class="op">--due</span> 2026-07-15
+<span class="kw">axm-aide task done</span> <span class="pa">&lt;task_id&gt;</span>     <span class="c"># a NEW shard; original never rewritten</span>
+
+<span class="c"># Record what a session did — and what it PROPOSES</span>
+<span class="kw">axm-aide session record</span> \
+  <span class="op">--read</span> sh1_… <span class="op">--produced</span> sh1_… \
+  <span class="op">--propose</span> <span class="st">"Email the quarterly report to finance"</span>
+
+<span class="c"># The morning read</span>
+<span class="kw">axm-aide brief</span>
+
+<span class="c"># Verify offline (exit 0 pass / 1 fail / 2 no anchor)</span>
+<span class="kw">axm-aide verify</span>
+</pre>
+    </div>
+
+    <div class="install-card">
+      <div class="install-phase">Ecosystem</div>
+      <pre style="font-size:12px;line-height:1.75;">
+<span class="c"># axm-genesis  — cryptographic kernel</span>
+<span class="c">#               BLAKE3 + ML-DSA-44 + axm-verify</span>
+
+<span class="c"># axm-core     — Spectra + Forge + DuckDB runtime</span>
+
+<span class="c"># axm-aide     — this spoke</span>
+<span class="c">#               journal / task / session / brief / verify</span>
+
+<span class="c"># Registered under axm.spokes, so once axm-core discovers</span>
+<span class="c"># the installed spoke, the same verbs run under:</span>
+<span class="kw">axm aide</span> journal <span class="st">"…"</span>
+<span class="kw">axm aide</span> brief
+</pre>
+    </div>
+
+    <div class="install-card">
+      <div class="install-phase">Honest, dated</div>
+      <pre style="font-size:12px;line-height:1.75;">
+<span class="c"># Not on PyPI — this is a source / git checkout install.</span>
+<span class="c"># Suite: 31/31 on the pinned genesis kernel + the axm-core read</span>
+<span class="c"># side (seal + verify + brief↔Spectra), verified locally.</span>
+<span class="c"># CI runs the same on every push; a skip is treated as a failure.</span>
+
+<span class="c"># Shards live in ~/.axm/shards/aide_*</span>
+<span class="c"># Keys live in ~/.axm/keys (publisher.sk / publisher.pub)</span>
+</pre>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <span class="footer-brand">AXM — axm-aide</span>
+  <div class="footer-links">
+    <a href="https://bigbirdreturns.github.io/axm-genesis/">axm-genesis</a>
+    <a href="https://bigbirdreturns.github.io/axm-core/">axm-core</a>
+    <a href="https://github.com/BigBirdReturns/axm-aide">GitHub</a>
+  </div>
+  <span class="footer-meta">agent_record — caller-declared, sealed, verifiable · not a verified fact about the world</span>
+</footer>
+
+<script>
+const sections = document.querySelectorAll('section[id], header.hero');
+const navLinks = document.querySelectorAll('nav a');
+
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      const id = entry.target.id || 'what';
+      navLinks.forEach(a => {
+        a.classList.toggle('active', a.getAttribute('href') === `#${id}`);
+      });
+    }
+  });
+}, { threshold: 0.25 });
+
+document.querySelectorAll('section[id]').forEach(s => observer.observe(s));
+
+const cards = document.querySelectorAll('.role-card, .install-card, .flow-step');
+const cardObs = new IntersectionObserver((entries) => {
+  entries.forEach((entry) => {
+    if (entry.isIntersecting) {
+      entry.target.style.opacity = '0';
+      entry.target.style.transform = 'translateY(12px)';
+      entry.target.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
+      setTimeout(() => {
+        entry.target.style.opacity = '1';
+        entry.target.style.transform = 'none';
+      }, 60);
+      cardObs.unobserve(entry.target);
+    }
+  });
+}, { threshold: 0.1 });
+cards.forEach(c => cardObs.observe(c));
+</script>
+</body>
+</html>
