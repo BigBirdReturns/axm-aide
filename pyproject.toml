@@ -1,0 +1,73 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "axm-aide"
+version = "0.1.0"
+description = "AXM aide spoke — a sovereign personal assistant whose memory has custody and whose judgment is surrendered"
+readme = "README.md"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.10"
+dependencies = [
+  # ── Protocol kernel ────────────────────────────────────────────────────────
+  # One custody model. The aide never mints a shard_id and never reimplements
+  # compilation, signing, Merkle construction, or verification — those are the
+  # genesis kernel's, imported here. Pinned to the SAME v1.0.0 commit every
+  # sibling spoke pins (re-pin at the v1.0.0 tag).
+  "axm-genesis @ git+https://github.com/BigBirdReturns/axm-genesis.git@9074e7fb2e9cedde692b248cdd0c6a805e77d8ac",
+
+  # ── Query runtime ──────────────────────────────────────────────────────────
+  # `axm-aide brief` mounts sealed aide shards into axiom_runtime.SpectraEngine
+  # (the read side of the ecosystem) to render the morning read. That lives in
+  # axm-core. Declaring the dependency keeps the install contract honest: the
+  # journal / task / session *seal* path works without axm-core, but `brief`
+  # (and any query) exits with an install hint if axm-core is absent.
+  #
+  # axm-core is not on PyPI, so this plain-name pin is only resolvable once the
+  # sibling checkout is already installed (`pip install -e ../axm-core`).
+  "axm-core>=1.1.0",
+
+  # ── CLI + storage ─────────────────────────────────────────────────────────
+  "click>=8.0.0",
+  "duckdb>=0.9.0",
+]
+
+[project.optional-dependencies]
+# Seal-only install: journal / task add / task done / session record and
+# detached verify all work with just the kernel. `brief` needs axm-core and
+# exits with an install hint when it is missing.
+minimal = [
+  # re-pin at v1.0.0 release
+  "axm-genesis @ git+https://github.com/BigBirdReturns/axm-genesis.git@9074e7fb2e9cedde692b248cdd0c6a805e77d8ac",
+  "click>=8.0.0",
+]
+dev = [
+  "pytest>=7.0",
+  "ruff>=0.1.0",
+]
+
+# ── Entry points ──────────────────────────────────────────────────────────────
+
+# Direct command — works standalone, before the `axm` host is installed.
+[project.scripts]
+axm-aide = "axm_aide.cli:main"
+
+# Plugin registration — axm-core's CLI host discovers this on startup, so
+# `axm aide journal "…"` works once the spoke is installed.
+[project.entry-points."axm.spokes"]
+aide = "axm_aide.cli:aide_group"
+
+# ── Package discovery ─────────────────────────────────────────────────────────
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# ── Test config ─────────────────────────────────────────────────────────────
+# Make the src/ layout importable without an editable install so the
+# genesis-free unit tests run as-is (`pytest`).
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
