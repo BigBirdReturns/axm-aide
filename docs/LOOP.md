@@ -99,3 +99,13 @@ NEVER:
 A human will review your proposals and disposition them. That is the only path
 by which anything you propose becomes an action.
 ```
+
+## Trust-model note (v0, stated plainly)
+
+In v0 the proposer and the disposer share one key pool (`~/.axm/keys`). The
+aide structurally cannot seal a `disposition` claim — no aide verb emits that
+predicate — but the review flow's dispositions are not yet *cryptographically*
+distinguished from the aide's own records. A future version should give the
+human reviewer a separate keypair so a disposition is provably not
+self-issued. Until then, the separation is enforced by vocabulary and code
+path, not by keys. Declared, not hidden.

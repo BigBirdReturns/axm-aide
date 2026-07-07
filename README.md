@@ -81,3 +81,9 @@ axm-aide is the spoke a scheduled agent session writes to: read the brief → do
 ## License
 
 Apache-2.0. Part of the AXM ecosystem. This spoke imports the genesis kernel (`axm_build` / `axm_verify`) and axm-core's `axiom_runtime` — the documented spoke privilege — and nothing else from any sibling.
+
+## Licensing note
+
+The repository code is Apache-2.0 (see LICENSE). Sealed shards stamp
+`LicenseRef-AXM-Personal` in their manifests: your journal, tasks, and session
+records are personal records, not redistributable code.

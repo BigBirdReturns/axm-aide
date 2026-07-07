@@ -160,17 +160,26 @@ def cmd_task_list(shards: Optional[str]):
             created_at = str((m.get("metadata") or {}).get("created_at", ""))
             labels = {r["entity_id"]: r["label"]
                       for r in _read_jsonl(sp / "graph" / "entities.jsonl")}
-            for c in _read_jsonl(sp / "graph" / "claims.jsonl"):
+            claims = list(_read_jsonl(sp / "graph" / "claims.jsonl"))
+            # Same-second ties break on the shard's status_seq claim (0 when
+            # absent), never on shard-name sort order.
+            try:
+                seq = next(int(c["object"]) for c in claims
+                           if c["predicate"] == "status_seq")
+            except StopIteration:
+                seq = 0
+            key = (created_at, seq)
+            for c in claims:
                 subj = labels.get(c["subject"], c["subject"])
                 t = tasks.setdefault(subj, {"title": None, "due": None,
-                                            "status": None, "status_at": ""})
+                                            "status": None, "status_key": ("", -1)})
                 if c["predicate"] == "has_title":
                     t["title"] = c["object"]
                 elif c["predicate"] == "due":
                     t["due"] = c["object"]
-                elif c["predicate"] == "declared_status" and created_at >= t["status_at"]:
+                elif c["predicate"] == "declared_status" and key >= t["status_key"]:
                     t["status"] = c["object"]
-                    t["status_at"] = created_at
+                    t["status_key"] = key
         except Exception as e:  # noqa: BLE001
             warn(f"  {sp.name}: unreadable ({e})")
 

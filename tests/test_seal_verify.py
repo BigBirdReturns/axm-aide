@@ -109,3 +109,65 @@ def test_status_history_is_append_only(pool):
     assert 'declared_status "open"' in add_src
     assert 'declared_status "done"' in done_src
     assert 'declared_status "done"' not in add_src   # original never rewritten
+
+
+def test_same_second_status_ties_break_by_sequence_not_name(pool):
+    """Control question (adversarial-review finding 1): two status changes in
+    the SAME second must resolve to the one sealed LAST — never to whichever
+    status word sorts later in the shard-name listing."""
+    _kernel()
+    from axm_aide.cli import _read_jsonl  # the kernel-only resolution path
+    from axm_aide.records import seal_task_add, seal_task_status
+
+    shards, keys = pool
+    ts = "2026-07-07T00:00:00Z"
+    t = seal_task_add("tie break me", shard_dir_root=shards, key_dir=keys, created_at=ts)
+    # Same second, sealed in this order: open -> dropped. Alphabetical shard
+    # order would resurrect "open"; the sequence must keep "dropped".
+    seal_task_status(t.record_id, "open", shard_dir_root=shards, key_dir=keys, created_at=ts)
+    seal_task_status(t.record_id, "dropped", shard_dir_root=shards, key_dir=keys, created_at=ts)
+
+    # Resolve exactly as `task list` does: created_at + status_seq per shard.
+    current = {}
+    for sp in sorted(shards.glob("aide_task_*")):
+        import json
+        m = json.loads((sp / "manifest.json").read_text())
+        created = str((m.get("metadata") or {}).get("created_at", ""))
+        claims = list(_read_jsonl(sp / "graph" / "claims.jsonl"))
+        seq = next((int(c["object"]) for c in claims if c["predicate"] == "status_seq"), 0)
+        for c in claims:
+            if c["predicate"] == "declared_status":
+                key = (created, seq)
+                if key >= current.get("key", ("", -1)):
+                    current = {"key": key, "status": c["object"]}
+    assert current["status"] == "dropped"
+
+
+def test_same_second_same_status_shards_do_not_overwrite(pool):
+    """Two identical statuses in the same second are two events on disk —
+    the sequence in the shard name keeps the append-only store append-only."""
+    _kernel()
+    from axm_aide.records import seal_task_add, seal_task_status
+
+    shards, keys = pool
+    ts = "2026-07-07T00:00:00Z"
+    t = seal_task_add("twice", shard_dir_root=shards, key_dir=keys, created_at=ts)
+    a = seal_task_status(t.record_id, "done", shard_dir_root=shards, key_dir=keys, created_at=ts)
+    b = seal_task_status(t.record_id, "done", shard_dir_root=shards, key_dir=keys, created_at=ts)
+    assert a.shard_dir != b.shard_dir
+
+
+def test_colliding_caller_content_refuses_cleanly(pool):
+    """Control question (adversarial-review finding 2): caller text that
+    reproduces one of the record's own claim lines must refuse with a clear
+    aide-level error, not a raw kernel traceback."""
+    _kernel()
+    from axm_aide.records import seal_journal
+
+    shards, keys = pool
+    ts = "2026-07-07T00:00:00Z"
+    eid = "cafe0001"
+    hostile = f'journal/{eid} recorded_at "{ts}"'   # duplicates the header claim line
+    with pytest.raises(ValueError, match="reproduces one of its own claim lines"):
+        seal_journal(hostile, shard_dir_root=shards, key_dir=keys,
+                     created_at=ts, entry_id=eid)

@@ -143,6 +143,15 @@ def _collect_rows(
             skipped.append((s.name, str(result.get("status", "FAIL"))))
 
     if not verified:
+        if skipped:
+            # A store full of unverifiable shards is a finding, not an empty
+            # morning: refuse loudly so a scripted operator sees a failure.
+            names = ", ".join(n for n, _ in skipped[:5])
+            raise BriefError(
+                f"all {len(skipped)} aide shard(s) failed detached "
+                f"verification (e.g. {names}) — nothing mounted; check the "
+                f"trusted key."
+            )
         return [], consulted, skipped
 
     # Single-user CLI: Spectra's system-key requirement is for multi-tenant
@@ -231,25 +240,34 @@ def build_brief(
         reverse=True,
     )[:last_n]
 
-    # ── Tasks (latest declared_status wins, by seal time) ──────────────────
+    # ── Tasks (latest declared_status wins, by seal time then status_seq) ──
+    seq_by_shard: Dict[str, int] = {}
+    for r in rows:
+        if r.predicate == "status_seq":
+            try:
+                seq_by_shard[r.shard_id] = int(r.object)
+            except (TypeError, ValueError):
+                pass
     tasks: Dict[str, dict] = {}
     for r in rows:
         if r.namespace != NS_TASK:
             continue
         t = tasks.setdefault(r.subject, {
             "task": r.subject, "title": None, "due": None,
-            "status": None, "status_at": "",
+            "status": None, "status_key": ("", -1),
         })
         if r.predicate == "has_title":
             t["title"] = r.object
         elif r.predicate == "due":
             t["due"] = r.object
         elif r.predicate == "declared_status":
-            # Append-only history: the assertion from the shard with the latest
-            # created_at is the current status.
-            if r.created_at >= t["status_at"]:
+            # Append-only history: latest created_at wins; same-second ties
+            # are broken by the shard's status_seq claim (0 when absent, e.g.
+            # the task-add shard) — never by shard-name sort order.
+            key = (r.created_at, seq_by_shard.get(r.shard_id, 0))
+            if key >= t["status_key"]:
                 t["status"] = r.object
-                t["status_at"] = r.created_at
+                t["status_key"] = key
     open_tasks = [t for t in tasks.values() if t["status"] == "open"]
     open_tasks.sort(key=lambda t: (t["due"] or "9999", t["task"]))
 

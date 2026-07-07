@@ -322,7 +322,21 @@ def _seal(
             extra_content=(("aide_manifest.json", manifest_path),),
         )
 
-        if not compile_generic_shard(cfg):
+        try:
+            ok = compile_generic_shard(cfg)
+        except ValueError as exc:
+            if "Ambiguous evidence" in str(exc):
+                # Caller content reproduced one of this record's own claim
+                # lines, so an evidence span stopped being unique. Surface a
+                # clear aide-level refusal instead of a kernel traceback.
+                raise ValueError(
+                    f"cannot seal {shard_name}: the record text reproduces one "
+                    f"of its own claim lines, making an evidence span ambiguous "
+                    f"— change the text (or the record id) and retry. "
+                    f"[kernel: {exc}]"
+                ) from exc
+            raise
+        if not ok:
             raise RuntimeError(f"kernel compile produced no shard for {shard_name}")
 
         # Custody identity is genesis's, derived from the sealed manifest bytes.
@@ -412,13 +426,25 @@ def seal_journal(
 _VALID_STATUS = ("open", "done", "dropped")
 
 
-def task_status_statements(task_id: str, status: str) -> List[_Stmt]:
-    """Pure builder for a status change: ``task/{id} declared_status "<status>"`` (tier 0)."""
+def task_status_statements(task_id: str, status: str, seq: int = 0) -> List[_Stmt]:
+    """Pure builder for a status change: ``declared_status`` plus ``status_seq``.
+
+    ``status_seq`` (tier 0) is a per-task monotonic counter that breaks ties
+    when two status shards share the same seconds-granularity ``created_at`` —
+    without it, same-second ordering would be decided by shard-name sort order
+    (i.e. by the status WORD), not by what actually happened last.
+    """
     subj = f"task/{task_id}"
-    return [
+    stmts = [
         _Stmt(f'{subj} declared_status "{status}"', subj, "declared_status",
               status, "literal:string", 0),
     ]
+    if seq:
+        stmts.append(
+            _Stmt(f'{subj} status_seq "{seq}"', subj, "status_seq",
+                  str(seq), "literal:integer", 0)
+        )
+    return stmts
 
 
 def task_add_statements(
@@ -491,16 +517,20 @@ def seal_task_status(
     ts = created_at or now_rfc3339()
     subj = f"task/{task_id}"
 
-    statements = task_status_statements(task_id, status)
-    # A distinct dir per event: the seal timestamp keeps append-only shards for
-    # the same task from colliding on disk.
+    # Monotonic per-task sequence: 1 + the number of existing status-change
+    # shards for this task (the task-add shard is seq 0). Breaks same-second
+    # created_at ties honestly, and keeps same-second shard dirs from
+    # colliding on disk (a lost event would break the append-only story).
+    seq = 1 + len(list(Path(shard_dir_root).glob(f"aide_task_{task_id}_*")))
+    statements = task_status_statements(task_id, status, seq)
+    # A distinct dir per event: timestamp + sequence.
     stamp = ts.replace(":", "").replace("-", "").replace("T", "").replace("Z", "")
     return _seal(
         namespace=NS_TASK,
         statements=statements,
         verbatim_sections=[],
         title=f"task {task_id} → {status}",
-        shard_name=f"aide_task_{task_id}_{status}_{stamp}",
+        shard_name=f"aide_task_{task_id}_{status}_{stamp}_{seq}",
         record_id=task_id,
         shard_dir_root=shard_dir_root,
         key_dir=key_dir,
